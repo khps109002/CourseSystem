@@ -1,0 +1,617 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>屏東縣光華國小課表查詢系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .schedule-table {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: fixed;
+        }
+        .schedule-table th, .schedule-table td {
+            border: 1px solid #cbd5e0;
+            padding: 6px 4px;
+            text-align: center;
+            height: 70px;
+            vertical-align: middle;
+            font-size: 0.9rem;
+        }
+        .schedule-table th {
+            background-color: #4299e1;
+            color: white;
+            height: 40px;
+            font-size: 1rem;
+        }
+        .schedule-table tr:nth-child(even) {
+            background-color: #edf2f7;
+        }
+        .schedule-table tr:hover {
+            background-color: #e2e8f0;
+        }
+        .teacher-link {
+            color: #3182ce;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .class-link {
+            color: #3182ce;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .empty-cell {
+            background-color: #f9fafb;
+        }
+        .subject-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen">
+        <!-- 頁首 -->
+        <header class="bg-blue-600 text-white p-4 shadow-md relative">
+            <h1 class="text-3xl font-bold text-center">屏東縣光華國小課表查詢系統</h1>
+            <div class="absolute top-4 right-4">
+                <button id="loginBtn" class="bg-white text-blue-600 px-4 py-2 rounded-md font-semibold hover:bg-blue-100 transition cursor-pointer">登入</button>
+                <div id="userInfo" class="hidden">
+                    <span id="username" class="mr-2"></span>
+                    <button id="logoutBtn" class="bg-white text-blue-600 px-4 py-2 rounded-md font-semibold hover:bg-blue-100 transition cursor-pointer">登出</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 登入對話框 -->
+        <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+                <h2 class="text-xl font-bold mb-4">管理員登入</h2>
+                <div class="mb-4">
+                    <label for="usernameInput" class="block text-gray-700 mb-2">帳號</label>
+                    <input type="text" id="usernameInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-6">
+                    <label for="passwordInput" class="block text-gray-700 mb-2">密碼</label>
+                    <input type="password" id="passwordInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex justify-end">
+                    <button id="cancelLoginBtn" class="px-4 py-2 text-gray-600 mr-2 hover:bg-gray-100 rounded-md cursor-pointer">取消</button>
+                    <button id="submitLoginBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">登入</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 上傳CSV對話框 -->
+        <div id="uploadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+                <h2 class="text-xl font-bold mb-4">上傳課表CSV檔案</h2>
+                <div class="mb-4">
+                    <p id="currentFileInfo" class="text-gray-600 mb-2">目前檔案: <span id="currentFileName">尚未上傳</span></p>
+                    <label for="csvFile" class="block text-gray-700 mb-2">選擇檔案 (使用Big5編碼)</label>
+                    <input type="file" id="csvFile" accept=".csv" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div class="flex justify-end">
+                    <button id="cancelUploadBtn" class="px-4 py-2 text-gray-600 mr-2 hover:bg-gray-100 rounded-md cursor-pointer">取消</button>
+                    <button id="submitUploadBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">上傳</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 管理員面板 -->
+        <div id="adminPanel" class="bg-blue-100 p-4 hidden">
+            <div class="container mx-auto flex justify-between items-center">
+                <h2 class="text-xl font-bold">管理員面板</h2>
+                <button id="uploadBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700 transition cursor-pointer">上傳課表CSV</button>
+            </div>
+        </div>
+
+        <!-- 主要內容 -->
+        <main class="container mx-auto p-4">
+            <!-- 查詢區域 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-4">班級查詢</h2>
+                    <div class="flex space-x-2">
+                        <select id="gradeSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">選擇年級</option>
+                        </select>
+                        <select id="classSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">選擇班級</option>
+                        </select>
+                        <button id="searchClassBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">查詢</button>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-4">教師查詢</h2>
+                    <div class="flex space-x-2">
+                        <select id="teacherSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 flex-grow">
+                            <option value="">選擇教師</option>
+                        </select>
+                        <button id="searchTeacherBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">查詢</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 課表顯示區域 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-4">班級課表</h2>
+                    <div id="classScheduleContainer" class="overflow-x-auto">
+                        <div id="classScheduleInfo" class="mb-2 font-semibold text-blue-600"></div>
+                        <table id="classSchedule" class="schedule-table">
+                            <thead>
+                                <tr>
+                                    <th>節次</th>
+                                    <th>週一</th>
+                                    <th>週二</th>
+                                    <th>週三</th>
+                                    <th>週四</th>
+                                    <th>週五</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center py-8 text-gray-500">請選擇班級進行查詢</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-4">教師課表</h2>
+                    <div id="teacherScheduleContainer" class="overflow-x-auto">
+                        <div id="teacherScheduleInfo" class="mb-2 font-semibold text-blue-600"></div>
+                        <table id="teacherSchedule" class="schedule-table">
+                            <thead>
+                                <tr>
+                                    <th>節次</th>
+                                    <th>週一</th>
+                                    <th>週二</th>
+                                    <th>週三</th>
+                                    <th>週四</th>
+                                    <th>週五</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center py-8 text-gray-500">請選擇教師進行查詢</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 頁尾 -->
+        <footer class="bg-gray-800 text-white p-4 mt-8">
+            <div class="container mx-auto text-center">
+                <p>© 2025 屏東縣光華國小. ( ´థ౪థ） 版權所有. ( ´థ౪థ）</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // 全局變數
+        let scheduleData = [];
+        let isLoggedIn = false;
+        let currentFileNameValue = "尚未上傳";
+        
+        // 定義標準節次
+        const standardPeriods = ["第一節", "第二節", "第三節", "第四節", "第五節", "第六節", "第七節", "第八節"];
+        const weekdays = ["週一", "週二", "週三", "週四", "週五"];
+
+        // 示範資料
+        const sampleData = [
+            ["週次","節次","年級","班級","教師姓名","校訂課程名稱","上課頻率"],
+            ["週一","第一節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週一","第二節","一年級","第01班","施婕文","體育","每週上課"],
+            ["週一","第三節","一年級","第01班","莊幼玲","數學","每週上課"],
+            ["週一","第四節","一年級","第01班","莊幼玲","生活","每週上課"],
+            ["週二","第一節","一年級","第01班","馬詩雯","生活音樂","每週上課"],
+            ["週二","第二節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週二","第三節","一年級","第01班","莊幼玲","生活","每週上課"],
+            ["週二","第四節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週二","第五節","一年級","第01班","林佩潤","彈性英語","每週上課"],
+            ["週二","第六節","一年級","第01班","莊幼玲","數學","每週上課"],
+            ["週二","第七節","一年級","第01班","莊幼玲","生活美勞","每週上課"],
+            ["週三","第一節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週三","第二節","一年級","第01班","蔡春芬","本土語","每週上課"],
+            ["週三","第三節","一年級","第01班","徐珮芸","彈性閱讀","每週上課"],
+            ["週三","第四節","一年級","第01班","莊幼玲","數學","每週上課"],
+            ["週四","第一節","一年級","第01班","利真光","生活律動","每週上課"],
+            ["週四","第二節","一年級","第01班","莊幼玲","生活","每週上課"],
+            ["週四","第三節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週四","第四節","一年級","第01班","莊幼玲","數學","每週上課"],
+            ["週五","第一節","一年級","第01班","施婕文","體育","每週上課"],
+            ["週五","第二節","一年級","第01班","莊幼玲","彈性課程","每週上課"],
+            ["週五","第三節","一年級","第01班","莊幼玲","國語文","每週上課"],
+            ["週五","第四節","一年級","第01班","莊幼玲","健康","每週上課"],
+            ["週一","第一節","一年級","第02班","陳文潔","生活","每週上課"],
+            ["週一","第二節","一年級","第02班","陳文潔","國語文","每週上課"],
+            ["週一","第三節","一年級","第02班","施婕文","體育","每週上課"],
+            ["週一","第四節","一年級","第02班","陳文潔","數學","每週上課"],
+            ["週二","第一節","一年級","第02班","林佩潤","彈性英語","每週上課"],
+            ["週二","第二節","一年級","第02班","陳文潔","數學","每週上課"],
+            ["週二","第三節","一年級","第02班","馬詩雯","生活音樂","每週上課"]
+        ];
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 載入示範資料
+            loadScheduleData(sampleData);
+            
+            // 事件監聽器設置
+            setupEventListeners();
+        });
+
+        // 設置所有事件監聽器
+        function setupEventListeners() {
+            // 登入相關
+            document.getElementById('loginBtn').addEventListener('click', showLoginModal);
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            document.getElementById('submitLoginBtn').addEventListener('click', login);
+            document.getElementById('cancelLoginBtn').addEventListener('click', hideLoginModal);
+            
+            // 上傳相關
+            document.getElementById('uploadBtn').addEventListener('click', showUploadModal);
+            document.getElementById('submitUploadBtn').addEventListener('click', uploadCSV);
+            document.getElementById('cancelUploadBtn').addEventListener('click', hideUploadModal);
+            
+            // 查詢相關
+            document.getElementById('searchClassBtn').addEventListener('click', searchClassSchedule);
+            document.getElementById('searchTeacherBtn').addEventListener('click', searchTeacherSchedule);
+            document.getElementById('gradeSelect').addEventListener('change', updateClassOptions);
+            
+            // 按下Enter鍵登入
+            document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
+        }
+
+        // 載入課表資料
+        function loadScheduleData(data) {
+            scheduleData = data;
+            
+            // 更新年級選項
+            updateGradeOptions();
+            
+            // 更新教師選項
+            updateTeacherOptions();
+        }
+
+        // 更新年級選項
+        function updateGradeOptions() {
+            // 清空現有選項
+            const gradeSelect = document.getElementById('gradeSelect');
+            gradeSelect.innerHTML = '<option value="">選擇年級</option>';
+            
+            // 獲取所有不重複的年級
+            const grades = [...new Set(scheduleData.slice(1).map(row => row[2]))];
+            
+            // 添加年級選項
+            grades.forEach(grade => {
+                const option = document.createElement('option');
+                option.value = grade;
+                option.textContent = grade;
+                gradeSelect.appendChild(option);
+            });
+        }
+
+        // 更新班級選項
+        function updateClassOptions() {
+            // 清空現有選項
+            const classSelect = document.getElementById('classSelect');
+            classSelect.innerHTML = '<option value="">選擇班級</option>';
+            
+            const selectedGrade = document.getElementById('gradeSelect').value;
+            if (!selectedGrade) return;
+            
+            // 獲取所選年級的所有不重複班級
+            const classes = [...new Set(scheduleData.slice(1)
+                .filter(row => row[2] === selectedGrade)
+                .map(row => row[3]))];
+            
+            // 添加班級選項
+            classes.forEach(cls => {
+                const option = document.createElement('option');
+                option.value = cls;
+                option.textContent = cls;
+                classSelect.appendChild(option);
+            });
+        }
+
+        // 更新教師選項
+        function updateTeacherOptions() {
+            // 清空現有選項
+            const teacherSelect = document.getElementById('teacherSelect');
+            teacherSelect.innerHTML = '<option value="">選擇教師</option>';
+            
+            // 獲取所有不重複的教師
+            const teachers = [...new Set(scheduleData.slice(1).map(row => row[4]))];
+            
+            // 添加教師選項
+            teachers.sort().forEach(teacher => {
+                const option = document.createElement('option');
+                option.value = teacher;
+                option.textContent = teacher;
+                teacherSelect.appendChild(option);
+            });
+        }
+
+        // 顯示登入對話框
+        function showLoginModal() {
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('usernameInput').focus();
+        }
+
+        // 隱藏登入對話框
+        function hideLoginModal() {
+            document.getElementById('loginModal').classList.add('hidden');
+            document.getElementById('usernameInput').value = '';
+            document.getElementById('passwordInput').value = '';
+        }
+
+        // 登入
+        function login() {
+            const inputUsername = document.getElementById('usernameInput').value;
+            const inputPassword = document.getElementById('passwordInput').value;
+            
+            if (inputUsername === 'hikaruhr' && inputPassword === 'a9102202') {
+                isLoggedIn = true;
+                document.getElementById('loginBtn').classList.add('hidden');
+                document.getElementById('userInfo').classList.remove('hidden');
+                document.getElementById('username').textContent = inputUsername;
+                document.getElementById('adminPanel').classList.remove('hidden');
+                hideLoginModal();
+            } else {
+                alert('帳號或密碼錯誤！');
+            }
+        }
+
+        // 登出
+        function logout() {
+            isLoggedIn = false;
+            document.getElementById('loginBtn').classList.remove('hidden');
+            document.getElementById('userInfo').classList.add('hidden');
+            document.getElementById('adminPanel').classList.add('hidden');
+        }
+
+        // 顯示上傳對話框
+        function showUploadModal() {
+            document.getElementById('uploadModal').classList.remove('hidden');
+            document.getElementById('currentFileName').textContent = currentFileNameValue;
+        }
+
+        // 隱藏上傳對話框
+        function hideUploadModal() {
+            document.getElementById('uploadModal').classList.add('hidden');
+            document.getElementById('csvFile').value = '';
+        }
+
+        // 上傳CSV
+        function uploadCSV() {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) {
+                alert('請選擇檔案！');
+                return;
+            }
+            
+            // 更新當前檔案名稱
+            currentFileNameValue = file.name;
+            document.getElementById('currentFileName').textContent = currentFileNameValue;
+            
+            // 讀取CSV檔案 (使用Big5編碼)
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const csv = e.target.result;
+                
+                // 使用PapaParse解析CSV
+                const results = Papa.parse(csv, { 
+                    skipEmptyLines: true,
+                    encoding: 'Big5'
+                });
+                
+                // 檢查解析結果
+                if (results.errors && results.errors.length > 0) {
+                    console.error("CSV解析錯誤:", results.errors);
+                    alert('CSV檔案解析錯誤，請檢查檔案格式。');
+                    return;
+                }
+                
+                // 載入解析後的資料
+                loadScheduleData(results.data);
+                hideUploadModal();
+                alert('課表上傳成功！');
+            };
+            
+            // 使用Big5編碼讀取檔案
+            reader.readAsText(file, 'Big5');
+        }
+
+        // 格式化班級名稱 (例如: "一年級第01班" -> "一年1班")
+        function formatClassName(grade, cls) {
+            // 從年級中提取年級數字 (例如: "一年級" -> "一年")
+            const gradeNum = grade.replace('年級', '年');
+            
+            // 從班級中提取班級數字 (例如: "第01班" -> "1班")
+            const classNum = cls.replace('第', '').replace('班', '').replace(/^0+/, '') + '班';
+            
+            return gradeNum + classNum;
+        }
+
+        // 查詢班級課表
+        function searchClassSchedule() {
+            const grade = document.getElementById('gradeSelect').value;
+            const cls = document.getElementById('classSelect').value;
+            
+            if (!grade || !cls) {
+                alert('請選擇年級和班級！');
+                return;
+            }
+            
+            // 獲取班級課表資料
+            const classData = scheduleData.slice(1).filter(row => row[2] === grade && row[3] === cls);
+            
+            if (classData.length === 0) {
+                alert('找不到該班級的課表資料！');
+                return;
+            }
+            
+            // 顯示班級資訊 (格式化班級名稱)
+            document.getElementById('classScheduleInfo').textContent = formatClassName(grade, cls) + '課表';
+            
+            // 生成課表
+            generateClassSchedule(classData);
+        }
+
+        // 查詢教師課表
+        function searchTeacherSchedule() {
+            const teacher = document.getElementById('teacherSelect').value;
+            
+            if (!teacher) {
+                alert('請選擇教師！');
+                return;
+            }
+            
+            // 獲取教師課表資料
+            const teacherData = scheduleData.slice(1).filter(row => row[4] === teacher);
+            
+            if (teacherData.length === 0) {
+                alert('找不到該教師的課表資料！');
+                return;
+            }
+            
+            // 顯示教師資訊
+            document.getElementById('teacherScheduleInfo').textContent = `${teacher}老師課表`;
+            
+            // 生成課表
+            generateTeacherSchedule(teacherData);
+        }
+
+        // 生成班級課表
+        function generateClassSchedule(classData) {
+            // 創建課表HTML
+            let html = `
+                <thead>
+                    <tr>
+                        <th>節次</th>
+                        <th>週一</th>
+                        <th>週二</th>
+                        <th>週三</th>
+                        <th>週四</th>
+                        <th>週五</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            // 為每個標準節次創建一行
+            standardPeriods.forEach(period => {
+                html += `<tr><td>${period}</td>`;
+                
+                // 週一到週五
+                weekdays.forEach(day => {
+                    // 查找該節次該天的課程
+                    const lesson = classData.find(row => row[0] === day && row[1] === period);
+                    
+                    if (lesson) {
+                        const teacher = lesson[4];
+                        const subject = lesson[5];
+                        html += `<td><span class="subject-name">${subject}</span><span class="teacher-link" onclick="searchTeacherByName('${teacher}')">${teacher}</span></td>`;
+                    } else {
+                        html += '<td class="empty-cell"></td>';
+                    }
+                });
+                
+                html += '</tr>';
+            });
+            
+            html += '</tbody>';
+            document.getElementById('classSchedule').innerHTML = html;
+        }
+
+        // 生成教師課表
+        function generateTeacherSchedule(teacherData) {
+            // 創建課表HTML
+            let html = `
+                <thead>
+                    <tr>
+                        <th>節次</th>
+                        <th>週一</th>
+                        <th>週二</th>
+                        <th>週三</th>
+                        <th>週四</th>
+                        <th>週五</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            // 為每個標準節次創建一行
+            standardPeriods.forEach(period => {
+                html += `<tr><td>${period}</td>`;
+                
+                // 週一到週五
+                weekdays.forEach(day => {
+                    // 查找該節次該天的課程
+                    const lessons = teacherData.filter(row => row[0] === day && row[1] === period);
+                    
+                    if (lessons.length > 0) {
+                        html += '<td>';
+                        lessons.forEach((lesson, index) => {
+                            const grade = lesson[2];
+                            const cls = lesson[3];
+                            const subject = lesson[5];
+                            const formattedClassName = formatClassName(grade, cls);
+                            html += `<span class="subject-name">${subject}</span><span class="class-link" onclick="searchClassByGradeAndClass('${grade}', '${cls}')">${formattedClassName}</span>`;
+                            if (index < lessons.length - 1) {
+                                html += '<hr class="my-1">';
+                            }
+                        });
+                        html += '</td>';
+                    } else {
+                        html += '<td class="empty-cell"></td>';
+                    }
+                });
+                
+                html += '</tr>';
+            });
+            
+            html += '</tbody>';
+            document.getElementById('teacherSchedule').innerHTML = html;
+        }
+
+        // 通過教師姓名查詢課表
+        function searchTeacherByName(teacherName) {
+            document.getElementById('teacherSelect').value = teacherName;
+            searchTeacherSchedule();
+        }
+
+        // 通過年級和班級查詢課表
+        function searchClassByGradeAndClass(grade, cls) {
+            document.getElementById('gradeSelect').value = grade;
+            updateClassOptions();
+            setTimeout(() => {
+                document.getElementById('classSelect').value = cls;
+                searchClassSchedule();
+            }, 100); // 給予一點時間讓班級選項更新
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'95273f1f9247f1dc',t:'MTc1MDM4MDM1OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
