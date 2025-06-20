@@ -13,7 +13,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 重定向根路徑到 CourseScheduleV2.html
+// 確保根路徑重定向（若已採用方案 1）
 app.get('/', (req, res) => {
     res.redirect('/CourseScheduleV2.html');
 });
@@ -63,6 +63,6 @@ app.post('/api/upload-csv', upload.single('csvFile'), (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`伺服器運行於 http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`伺服器運行於 http://0.0.0.0:${port}`);
 });
