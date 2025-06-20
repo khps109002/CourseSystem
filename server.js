@@ -13,6 +13,11 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 重定向根路徑到 CourseScheduleV2.html
+app.get('/', (req, res) => {
+    res.redirect('/CourseScheduleV2.html');
+});
+
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
