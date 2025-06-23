@@ -1,338 +1,188 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>屏東縣光華國小課表查詢系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <style>
-        body {
-            font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif;
-            background-color: #f0f4f8;
-        }
-        .schedule-table {
-            border-collapse: collapse;
-            width: 100%;
-            table-layout: fixed;
-        }
-        .schedule-table th, .schedule-table td {
-            border: 1px solid #cbd5e0;
-            padding: 6px 4px;
-            text-align: center;
-            height: 70px;
-            vertical-align: middle;
-            font-size: 0.9rem;
-        }
-        .schedule-table th {
-            background-color: #4299e1;
-            color: white;
-            height: 40px;
-            font-size: 1rem;
-        }
-        .schedule-table tr:nth-child(even) {
-            background-color: #edf2f7;
-        }
-        .schedule-table tr:hover {
-            background-color: #e2e8f0;
-        }
-        .teacher-link {
-            color: #3182ce;
-            text-decoration: underline;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-        .class-link {
-            color: #3182ce;
-            text-decoration: underline;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-        .empty-cell {
-            background-color: #f9fafb;
-        }
-        .subject-name {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: block;
-        }
-    </style>
 </head>
-<body>
-    <div class="min-h-screen">
-        <!-- 頁首 -->
-        <header class="bg-blue-600 text-white p-4 shadow-md relative">
-            <h1 class="text-3xl font-bold text-center">屏東縣光華國小課表查詢系統</h1>
-            <div class="absolute top-4 right-4">
-                <button id="loginBtn" class="bg-white text-blue-600 px-4 py-2 rounded-md font-semibold hover:bg-blue-100 transition cursor-pointer">登入</button>
-                <div id="userInfo" class="hidden">
-                    <span id="username" class="mr-2"></span>
-                    <button id="logoutBtn" class="bg-white text-blue-600 px-4 py-2 rounded-md font-semibold hover:bg-blue-100 transition cursor-pointer">登出</button>
-                </div>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-4">
+        <!-- 標題 -->
+        <h1 class="text-3xl font-bold text-center mb-4">屏東縣光華國小課表查詢系統</h1>
+
+        <!-- 登入/登出區域 -->
+        <div class="flex justify-end mb-4">
+            <div id="login-section" class="flex items-center">
+                <button id="login-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">登入</button>
             </div>
-        </header>
+            <div id="user-section" class="hidden flex items-center">
+                <span id="username" class="mr-2"></span>
+                <button id="logout-btn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">登出</button>
+            </div>
+        </div>
 
         <!-- 登入對話框 -->
-        <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-            <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+        <div id="login-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+            <div class="bg-white p-6 rounded shadow-lg w-96">
                 <h2 class="text-xl font-bold mb-4">管理員登入</h2>
                 <div class="mb-4">
-                    <label for="usernameInput" class="block text-gray-700 mb-2">帳號</label>
-                    <input type="text" id="usernameInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-sm font-medium mb-1" for="username-input">帳號</label>
+                    <input id="username-input" type="text" class="w-full border rounded px-3 py-2" />
                 </div>
-                <div class="mb-6">
-                    <label for="passwordInput" class="block text-gray-700 mb-2">密碼</label>
-                    <input type="password" id="passwordInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1" for="password-input">密碼</label>
+                    <input id="password-input" type="password" class="w-full border rounded px-3 py-2" />
                 </div>
                 <div class="flex justify-end">
-                    <button id="cancelLoginBtn" class="px-4 py-2 text-gray-600 mr-2 hover:bg-gray-100 rounded-md cursor-pointer">取消</button>
-                    <button id="submitLoginBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">登入</button>
+                    <button id="login-cancel-btn" class="mr-2 bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400">取消</button>
+                    <button id="login-submit-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">登入</button>
                 </div>
             </div>
         </div>
 
-        <!-- 上傳CSV對話框 -->
-        <div id="uploadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-            <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+        <!-- CSV 上傳對話框 -->
+        <div id="upload-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+            <div class="bg-white p-6 rounded shadow-lg w-96">
                 <h2 class="text-xl font-bold mb-4">上傳課表CSV檔案</h2>
+                <p class="mb-4">目前檔案: <span id="current-file">尚未上傳</span></p>
                 <div class="mb-4">
-                    <p id="currentFileInfo" class="text-gray-600 mb-2">目前檔案: <span id="currentFileName">尚未上傳</span></p>
-                    <label for="csvFile" class="block text-gray-700 mb-2">選擇檔案 (使用Big5編碼)</label>
-                    <input type="file" id="csvFile" accept=".csv" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <label class="block text-sm font-medium mb-1">選擇檔案 (使用Big5編碼)</label>
+                    <input id="csv-file-input" type="file" accept=".csv" class="w-full" />
                 </div>
                 <div class="flex justify-end">
-                    <button id="cancelUploadBtn" class="px-4 py-2 text-gray-600 mr-2 hover:bg-gray-100 rounded-md cursor-pointer">取消</button>
-                    <button id="submitUploadBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">上傳</button>
+                    <button id="upload-cancel-btn" class="mr-2 bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400">取消</button>
+                    <button id="upload-submit-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">上傳</button>
                 </div>
             </div>
         </div>
 
         <!-- 管理員面板 -->
-        <div id="adminPanel" class="bg-blue-100 p-4 hidden">
-            <div class="container mx-auto flex justify-between items-center">
-                <h2 class="text-xl font-bold">管理員面板</h2>
-                <button id="uploadBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700 transition cursor-pointer">上傳課表CSV</button>
+        <div id="admin-panel" class="hidden mb-4">
+            <h2 class="text-xl font-bold mb-2">管理員面板</h2>
+            <button id="upload-csv-btn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">上傳課表CSV</button>
+        </div>
+
+        <!-- 查詢區域 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <!-- 班級查詢 -->
+            <div>
+                <h2 class="text-xl font-bold mb-2">班級查詢</h2>
+                <div class="flex flex-col space-y-2">
+                    <select id="grade-select" class="border rounded px-3 py-2">
+                        <option value="">選擇年級</option>
+                    </select>
+                    <select id="class-select" class="border rounded px-3 py-2">
+                        <option value="">選擇班級</option>
+                    </select>
+                    <button id="class-query-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">查詢</button>
+                </div>
+            </div>
+            <!-- 教師查詢 -->
+            <div>
+                <h2 class="text-xl font-bold mb-2">教師查詢</h2>
+                <div class="flex flex-col space-y-2">
+                    <select id="teacher-select" class="border rounded px-3 py-2">
+                        <option value="">選擇教師</option>
+                    </select>
+                    <button id="teacher-query-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">查詢</button>
+                </div>
             </div>
         </div>
 
-        <!-- 主要內容 -->
-        <main class="container mx-auto p-4">
-            <!-- 查詢區域 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h2 class="text-xl font-bold mb-4">班級查詢</h2>
-                    <div class="flex space-x-2">
-                        <select id="gradeSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">選擇年級</option>
-                        </select>
-                        <select id="classSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">選擇班級</option>
-                        </select>
-                        <button id="searchClassBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">查詢</button>
-                    </div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h2 class="text-xl font-bold mb-4">教師查詢</h2>
-                    <div class="flex space-x-2">
-                        <select id="teacherSelect" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 flex-grow">
-                            <option value="">選擇教師</option>
-                        </select>
-                        <button id="searchTeacherBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer">查詢</button>
-                    </div>
-                </div>
+        <!-- 課表區域 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- 班級課表 -->
+            <div>
+                <h2 class="text-xl font-bold mb-2">班級課表</h2>
+                <table id="class-schedule-table" class="w-full border-collapse border">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border p-2">節次</th>
+                            <th class="border p-2">週一</th>
+                            <th class="border p-2">週二</th>
+                            <th class="border p-2">週三</th>
+                            <th class="border p-2">週四</th>
+                            <th class="border p-2">週五</th>
+                        </tr>
+                    </thead>
+                    <tbody id="class-schedule-body">
+                        <tr><td colspan="6" class="text-center p-4">請選擇班級進行查詢</td></tr>
+                    </tbody>
+                </table>
             </div>
-
-            <!-- 課表顯示區域 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h2 class="text-xl font-bold mb-4">班級課表</h2>
-                    <div id="classScheduleContainer" class="overflow-x-auto">
-                        <div id="classScheduleInfo" class="mb-2 font-semibold text-blue-600"></div>
-                        <table id="classSchedule" class="schedule-table">
-                            <thead>
-                                <tr>
-                                    <th>節次</th>
-                                    <th>週一</th>
-                                    <th>週二</th>
-                                    <th>週三</th>
-                                    <th>週四</th>
-                                    <th>週五</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="6" class="text-center py-8 text-gray-500">請選擇班級進行查詢</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow">
-                    <h2 class="text-xl font-bold mb-4">教師課表</h2>
-                    <div id="teacherScheduleContainer" class="overflow-x-auto">
-                        <div id="teacherScheduleInfo" class="mb-2 font-semibold text-blue-600"></div>
-                        <table id="teacherSchedule" class="schedule-table">
-                            <thead>
-                                <tr>
-                                    <th>節次</th>
-                                    <th>週一</th>
-                                    <th>週二</th>
-                                    <th>週三</th>
-                                    <th>週四</th>
-                                    <th>週五</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="6" class="text-center py-8 text-gray-500">請選擇教師進行查詢</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+            <!-- 教師課表 -->
+            <div>
+                <h2 class="text-xl font-bold mb-2">教師課表</h2>
+                <table id="teacher-schedule-table" class="w-full border-collapse border">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border p-2">節次</th>
+                            <th class="border p-2">週一</th>
+                            <th class="border p-2">週二</th>
+                            <th class="border p-2">週三</th>
+                            <th class="border p-2">週四</th>
+                            <th class="border p-2">週五</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teacher-schedule-body">
+                        <tr><td colspan="6" class="text-center p-4">請選擇教師進行查詢</td></tr>
+                    </tbody>
+                </table>
             </div>
-        </main>
+        </div>
 
         <!-- 頁尾 -->
-        <footer class="bg-gray-800 text-white p-4 mt-8">
-            <div class="container mx-auto text-center">
-                <p>© 2025 屏東縣光華國小. ( ´థ౪థ） 版權所有. ( ´థ౪థ）</p>
-            </div>
+        <footer class="text-center mt-4">
+            <p>© 2025 屏東縣光華國小. ( ´థ౪థ） 版權所有. ( ´థ౪థ）</p>
         </footer>
     </div>
 
     <script>
-        // 全局變數
+        // 儲存 CSV 資料
         let scheduleData = [];
-        let isLoggedIn = false;
-        let currentFileNameValue = "尚未上傳";
-        
-        // 定義標準節次
-        const standardPeriods = ["第一節", "第二節", "第三節", "第四節", "第五節", "第六節", "第七節", "第八節"];
-        const weekdays = ["週一", "週二", "週三", "週四", "週五"];
 
-        // 示範資料
-        const sampleData = [
-            ["週次","節次","年級","班級","教師姓名","校訂課程名稱","上課頻率"],
-            ["週一","第一節","一年級","第01班","莊幼玲","國語文","每週上課"],
-            ["週一","第二節","一年級","第01班","施婕文","體育","每週上課"],
-            ["週一","第三節","一年級","第01班","莊幼玲","數學","每週上課"],
-            ["週一","第四節","一年級","第01班","莊幼玲","生活","每週上課"],
-            ["週二","第一節","一年級","第01班","馬詩雯","生活音樂","每週上課"],
-            ["週二","第二節","一年級","第01班","莊幼玲","國語文","每週上課"],
-            ["週二","第三節","一年級","第01班","莊幼玲","生活","每週上課"],
-            ["週二","第一節","一年級","第02班","陳文潔","生活","每週上課"],
-            // ... 其他資料
-        ];
-
-        // 初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            loadScheduleData(sampleData);
-            setupEventListeners();
+        // 頁面載入時呼叫 API
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/read-csv');
+                const result = await response.json();
+                if (result.success) {
+                    scheduleData = result.data.slice(1); // 移除標頭
+                    populateSelects(); // 填充下拉選單
+                } else {
+                    alert('載入課表失敗: ' + result.message);
+                }
+            } catch (error) {
+                console.error('載入課表錯誤:', error);
+                alert('無法連接到伺服器，請稍後再試');
+            }
         });
 
-        // 設置事件監聽器
-        function setupEventListeners() {
-            document.getElementById('loginBtn').addEventListener('click', showLoginModal);
-            document.getElementById('logoutBtn').addEventListener('click', logout);
-            document.getElementById('submitLoginBtn').addEventListener('click', login);
-            document.getElementById('cancelLoginBtn').addEventListener('click', hideLoginModal);
-            document.getElementById('uploadBtn').addEventListener('click', showUploadModal);
-            document.getElementById('submitUploadBtn').addEventListener('click', uploadCSV);
-            document.getElementById('cancelUploadBtn').addEventListener('click', hideUploadModal);
-            document.getElementById('searchClassBtn').addEventListener('click', searchClassSchedule);
-            document.getElementById('searchTeacherBtn').addEventListener('click', searchTeacherSchedule);
-            document.getElementById('gradeSelect').addEventListener('change', updateClassOptions);
-            document.getElementById('passwordInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    login();
-                }
-            });
-        }
+        // 填充年級、班級、教師下拉選單
+        function populateSelects() {
+            const grades = [...new Set(scheduleData.map(row => row[2]))]; // 年級 (index 2)
+            const classes = [...new Set(scheduleData.map(row => row[3]))]; // 班級 (index 3)
+            const teachers = [...new Set(scheduleData.map(row => row[4]))]; // 教師姓名 (index 4)
 
-        // 載入課表資料
-        function loadScheduleData(data) {
-            scheduleData = data;
-            updateGradeOptions();
-            updateTeacherOptions();
-        }
-
-        // 更新年級選項
-        function updateGradeOptions() {
-            const gradeSelect = document.getElementById('gradeSelect');
-            gradeSelect.innerHTML = '<option value="">選擇年級</option>';
-            const grades = [...new Set(scheduleData.slice(1).map(row => row[2]))];
+            const gradeSelect = document.getElementById('grade-select');
             grades.forEach(grade => {
                 const option = document.createElement('option');
                 option.value = grade;
                 option.textContent = grade;
                 gradeSelect.appendChild(option);
             });
-        }
 
-        // 更新班級選項
-        function updateClassOptions() {
-            const classSelect = document.getElementById('classSelect');
-            classSelect.innerHTML = '<option value="">選擇班級</option>';
-            const selectedGrade = document.getElementById('gradeSelect').value;
-            if (!selectedGrade) return;
-            const classes = [...new Set(scheduleData.slice(1)
-                .filter(row => row[2] === selectedGrade)
-                .map(row => row[3]))];
+            const classSelect = document.getElementById('class-select');
             classes.forEach(cls => {
                 const option = document.createElement('option');
                 option.value = cls;
                 option.textContent = cls;
                 classSelect.appendChild(option);
             });
-        }
 
-        // 更新教師選項
-        function updateTeacherOptions() {
-            const teacherSelect = document.getElementById('teacherSelect');
-            teacherSelect.innerHTML = '<option value="">選擇教師</option>';
-            const teachers = [...new Set(scheduleData.slice(1).map(row => row[4]))];
-            teachers.sort().forEach(teacher => {
+            const teacherSelect = document.getElementById('teacher-select');
+            teachers.forEach(teacher => {
                 const option = document.createElement('option');
                 option.value = teacher;
                 option.textContent = teacher;
@@ -340,231 +190,169 @@
             });
         }
 
-        // 顯示登入對話框
-        function showLoginModal() {
-            document.getElementById('loginModal').classList.remove('hidden');
-            document.getElementById('usernameInput').focus();
-        }
+        // 渲染班級課表
+        document.getElementById('class-query-btn').addEventListener('click', () => {
+            const grade = document.getElementById('grade-select').value;
+            const cls = document.getElementById('class-select').value;
+            if (!grade || !cls) {
+                alert('請選擇年級和班級');
+                return;
+            }
 
-        // 隱藏登入對話框
-        function hideLoginModal() {
-            document.getElementById('loginModal').classList.add('hidden');
-            document.getElementById('usernameInput').value = '';
-            document.getElementById('passwordInput').value = '';
-        }
+            const filteredData = scheduleData.filter(row => row[2] === grade && row[3] === cls);
+            renderClassSchedule(filteredData);
+        });
 
-        // 登入
-        function login() {
-            const inputUsername = document.getElementById('usernameInput').value;
-            const inputPassword = document.getElementById('passwordInput').value;
+        // 渲染教師課表
+        document.getElementById('teacher-query-btn').addEventListener('click', () => {
+            const teacher = document.getElementById('teacher-select').value;
+            if (!teacher) {
+                alert('請選擇教師');
+                return;
+            }
 
-            fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: inputUsername, password: inputPassword })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    isLoggedIn = true;
-                    document.getElementById('loginBtn').classList.add('hidden');
-                    document.getElementById('userInfo').classList.remove('hidden');
-                    document.getElementById('username').textContent = inputUsername;
-                    document.getElementById('adminPanel').classList.remove('hidden');
-                    hideLoginModal();
-                } else {
-                    alert(data.message);
-                }
-            })
-            .catch(error => {
-                console.error('登入失敗:', error);
-                alert('登入失敗，請稍後再試。');
+            const filteredData = scheduleData.filter(row => row[4] === teacher);
+            renderTeacherSchedule(filteredData);
+        });
+
+        // 渲染班級課表
+        function renderClassSchedule(data) {
+            const tbody = document.getElementById('class-schedule-body');
+            tbody.innerHTML = '';
+
+            // 假設節次為 第一節 到 第八節
+            const periods = ['第一節', '第二節', '第三節', '第四節', '第五節', '第六節', '第七節', '第八節'];
+            const days = ['週一', '週二', '週三', '週四', '週五'];
+
+            periods.forEach(period => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="border p-2">${period}</td>`;
+                days.forEach(day => {
+                    const course = data.find(row => row[0] === day && row[1] === period);
+                    tr.innerHTML += `<td class="border p-2">${course ? course[5] : ''}</td>`;
+                });
+                tbody.appendChild(tr);
             });
         }
 
-        // 登出
-        function logout() {
-            isLoggedIn = false;
-            document.getElementById('loginBtn').classList.remove('hidden');
-            document.getElementById('userInfo').classList.add('hidden');
-            document.getElementById('adminPanel').classList.add('hidden');
+        // 渲染教師課表
+        function renderTeacherSchedule(data) {
+            const tbody = document.getElementById('teacher-schedule-body');
+            tbody.innerHTML = '';
+
+            const periods = ['第一節', '第二節', '第三節', '第四節', '第五節', '第六節', '第七節', '第八節'];
+            const days = ['週一', '週二', '週三', '週四', '週五'];
+
+            periods.forEach(period => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="border p-2">${period}</td>`;
+                days.forEach(day => {
+                    const course = data.find(row => row[0] === day && row[1] === period);
+                    tr.innerHTML += `<td class="border p-2">${course ? `${course[2]}${course[3]} ${course[5]}` : ''}</td>`;
+                });
+                tbody.appendChild(tr);
+            });
         }
 
-        // 顯示上傳對話框
-        function showUploadModal() {
-            document.getElementById('uploadModal').classList.remove('hidden');
-            document.getElementById('currentFileName').textContent = currentFileNameValue;
-        }
+        // 登入/登出邏輯
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const loginModal = document.getElementById('login-modal');
+        const loginCancelBtn = document.getElementById('login-cancel-btn');
+        const loginSubmitBtn = document.getElementById('login-submit-btn');
+        const uploadModal = document.getElementById('upload-modal');
+        const uploadCsvBtn = document.getElementById('upload-csv-btn');
+        const uploadCancelBtn = document.getElementById('upload-cancel-btn');
+        const uploadSubmitBtn = document.getElementById('upload-submit-btn');
+        const adminPanel = document.getElementById('admin-panel');
+        const loginSection = document.getElementById('login-section');
+        const userSection = document.getElementById('user-section');
+        const usernameSpan = document.getElementById('username');
 
-        // 隱藏上傳對話框
-        function hideUploadModal() {
-            document.getElementById('uploadModal').classList.add('hidden');
-            document.getElementById('csvFile').value = '';
-        }
+        loginBtn.addEventListener('click', () => {
+            loginModal.classList.remove('hidden');
+        });
 
-        // 上傳CSV（改進版：發送到後端）
-        function uploadCSV() {
-            const file = document.getElementById('csvFile').files[0];
-            if (!file) {
-                alert('請選擇檔案！');
+        loginCancelBtn.addEventListener('click', () => {
+            loginModal.classList.add('hidden');
+            document.getElementById('username-input').value = '';
+            document.getElementById('password-input').value = '';
+        });
+
+        loginSubmitBtn.addEventListener('click', async () => {
+            const username = document.getElementById('username-input').value;
+            const password = document.getElementById('password-input').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    loginModal.classList.add('hidden');
+                    loginSection.classList.add('hidden');
+                    userSection.classList.remove('hidden');
+                    usernameSpan.textContent = username;
+                    adminPanel.classList.remove('hidden');
+                    alert('登入成功');
+                } else {
+                    alert('登入失敗: ' + result.message);
+                }
+            } catch (error) {
+                console.error('登入錯誤:', error);
+                alert('無法連接到伺服器，請稍後再試');
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            loginSection.classList.remove('hidden');
+            userSection.classList.add('hidden');
+            adminPanel.classList.add('hidden');
+            document.getElementById('username-input').value = '';
+            document.getElementById('password-input').value = '';
+        });
+
+        uploadCsvBtn.addEventListener('click', () => {
+            uploadModal.classList.remove('hidden');
+        });
+
+        uploadCancelBtn.addEventListener('click', () => {
+            uploadModal.classList.add('hidden');
+            document.getElementById('csv-file-input').value = '';
+        });
+
+        uploadSubmitBtn.addEventListener('click', async () => {
+            const fileInput = document.getElementById('csv-file-input');
+            if (!fileInput.files[0]) {
+                alert('請選擇檔案');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('csvFile', file);
+            formData.append('csvFile', fileInput.files[0]);
 
-            fetch('/api/upload-csv', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    currentFileNameValue = file.name;
-                    document.getElementById('currentFileName').textContent = currentFileNameValue;
-                    loadScheduleData(data.data);
-                    hideUploadModal();
-                    alert('課表上傳成功！');
+            try {
+                const response = await fetch('/api/upload-csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.success) {
+                    uploadModal.classList.add('hidden');
+                    document.getElementById('current-file').textContent = fileInput.files[0].name;
+                    scheduleData = result.data.slice(1); // 更新前端資料
+                    populateSelects(); // 重新填充下拉選單
+                    alert('上傳成功');
                 } else {
-                    alert(data.message);
+                    alert('上傳失敗: ' + result.message);
                 }
-            })
-            .catch(error => {
-                console.error('上傳失敗:', error);
-                alert('上傳失敗，請稍後再試。');
-            });
-        }
-
-        // 格式化班級名稱
-        function formatClassName(grade, cls) {
-            const gradeNum = grade.replace('年級', '年');
-            const classNum = cls.replace('第', '').replace('班', '').replace(/^0+/, '') + '班';
-            return gradeNum + classNum;
-        }
-
-        // 查詢班級課表
-        function searchClassSchedule() {
-            const grade = document.getElementById('gradeSelect').value;
-            const cls = document.getElementById('classSelect').value;
-            if (!grade || !cls) {
-                alert('請選擇年級和班級！');
-                return;
+            } catch (error) {
+                console.error('上傳錯誤:', error);
+                alert('無法連接到伺服器，請稍後再試');
             }
-            const classData = scheduleData.slice(1).filter(row => row[2] === grade && row[3] === cls);
-            if (classData.length === 0) {
-                alert('找不到該班級的課表資料！');
-                return;
-            }
-            document.getElementById('classScheduleInfo').textContent = formatClassName(grade, cls) + '課表';
-            generateClassSchedule(classData);
-        }
-
-        // 查詢教師課表
-        function searchTeacherSchedule() {
-            const teacher = document.getElementById('teacherSelect').value;
-            if (!teacher) {
-                alert('請選擇教師！');
-                return;
-            }
-            const teacherData = scheduleData.slice(1).filter(row => row[4] === teacher);
-            if (teacherData.length === 0) {
-                alert('找不到該教師的課表資料！');
-                return;
-            }
-            document.getElementById('teacherScheduleInfo').textContent = `${teacher}老師課表`;
-            generateTeacherSchedule(teacherData);
-        }
-
-        // 生成班級課表
-        function generateClassSchedule(classData) {
-            let html = `
-                <thead>
-                    <tr>
-                        <th>節次</th>
-                        <th>週一</th>
-                        <th>週二</th>
-                        <th>週三</th>
-                        <th>週四</th>
-                        <th>週五</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-            standardPeriods.forEach(period => {
-                html += `<tr><td>${period}</td>`;
-                weekdays.forEach(day => {
-                    const lesson = classData.find(row => row[0] === day && row[1] === period);
-                    if (lesson) {
-                        const teacher = lesson[4];
-                        const subject = lesson[5];
-                        html += `<td><span class="subject-name">${subject}</span><span class="teacher-link" onclick="searchTeacherByName('${teacher}')">${teacher}</span></td>`;
-                    } else {
-                        html += '<td class="empty-cell"></td>';
-                    }
-                });
-                html += '</tr>';
-            });
-            html += '</tbody>';
-            document.getElementById('classSchedule').innerHTML = html;
-        }
-
-        // 生成教師課表
-        function generateTeacherSchedule(teacherData) {
-            let html = `
-                <thead>
-                    <tr>
-                        <th>節次</th>
-                        <th>週一</th>
-                        <th>週二</th>
-                        <th>週三</th>
-                        <th>週四</th>
-                        <th>週五</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-            standardPeriods.forEach(period => {
-                html += `<tr><td>${period}</td>`;
-                weekdays.forEach(day => {
-                    const lessons = teacherData.filter(row => row[0] === day && row[1] === period);
-                    if (lessons.length > 0) {
-                        html += '<td>';
-                        lessons.forEach((lesson, index) => {
-                            const grade = lesson[2];
-                            const cls = lesson[3];
-                            const subject = lesson[5];
-                            const formattedClassName = formatClassName(grade, cls);
-                            html += `<span class="subject-name">${subject}</span><span class="class-link" onclick="searchClassByGradeAndClass('${grade}', '${cls}')">${formattedClassName}</span>`;
-                            if (index < lessons.length - 1) {
-                                html += '<hr class="my-1">';
-                            }
-                        });
-                        html += '</td>';
-                    } else {
-                        html += '<td class="empty-cell"></td>';
-                    }
-                });
-                html += '</tr>';
-            });
-            html += '</tbody>';
-            document.getElementById('teacherSchedule').innerHTML = html;
-        }
-
-        // 通過教師姓名查詢
-        function searchTeacherByName(teacherName) {
-            document.getElementById('teacherSelect').value = teacherName;
-            searchTeacherSchedule();
-        }
-
-        // 通過年級和班級查詢
-        function searchClassByGradeAndClass(grade, cls) {
-            document.getElementById('gradeSelect').value = grade;
-            updateClassOptions();
-            setTimeout(() => {
-                document.getElementById('classSelect').value = cls;
-                searchClassSchedule();
-            }, 100);
-        }
+        });
     </script>
 </body>
 </html>

@@ -66,7 +66,7 @@ app.post('/api/upload-csv', upload.single('csvFile'), (req, res) => {
 
 // 新增讀取 CSV API
 app.get('/api/read-csv', async (req, res) => {
-    const filePath = path.join(__dirname, 'uploads', '光華國小(113-2)完整課表.csv');
+    const filePath = path.join(__dirname, 'uploads', '光華國小課表.csv');
     try {
         const fileBuffer = await fs.readFile(filePath);
         const decodedContent = iconv.decode(fileBuffer, 'Big5');
